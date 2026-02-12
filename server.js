@@ -1336,7 +1336,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
             deliveryDate: date,
             returnDate: returnDate || null, 
             billAmount: bill,
-            status: 'Accepted' // Manual orders default to Accepted
+            status: 'Accepted'
         });
         const order = await newOrder.save();
 
@@ -1442,7 +1442,7 @@ app.get('/api/orders/by-date', authMiddleware, async (req, res) => {
 });
 
 
-//Owner Subscription Dashboard ---
+//Owner Subscription Dashboard 
 app.get('/api/owner/subscriptions', isOwner, async (req, res) => {
     try {
         const report = await Subscription.aggregate([
@@ -1799,7 +1799,7 @@ app.post('/api/announcements/read', authMiddleware, async (req, res) => {
 });
 
 
-//Corn job(autumatically place order - 12:01)
+//Corn job(autumatically place order)
 cron.schedule('0 * * * *', async () => {
     console.log('Running Hourly Subscription Check...');
     await processSubscriptions();
@@ -1838,7 +1838,7 @@ const processSubscriptions = async () => {
                     productName: sub.productName,
                     quantity: sub.quantity,
                     
-                    emptyBottles: sub.quantity, // Set return qty = order qty
+                    emptyBottles: sub.quantity,
                     
                     deliveryDate: todayStr,
                     billAmount: 0, 
@@ -1856,7 +1856,7 @@ const processSubscriptions = async () => {
     }
 };
 
-//Buy Subscription -- WITH CARRY FORWARD LOGIC --
+//Buy Subscription  WITH CARRY FORWARD LOGIC
 app.post('/api/subscription/create', authMiddleware, async (req, res) => {
     const { productName, quantity, startDate, pricePerUnit } = req.body;
 
@@ -1868,7 +1868,6 @@ app.post('/api/subscription/create', authMiddleware, async (req, res) => {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        // 1. Standard Cost & Balance Check
         const standardDays = 30;
         const totalCost = standardDays * quantity * pricePerUnit;
 
@@ -1876,21 +1875,17 @@ app.post('/api/subscription/create', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: `Insufficient balance. Required: ₹${totalCost}` });
         }
 
-        // 2. CARRY FORWARD LOGIC
         const lastSub = await Subscription.findOne({ userId: req.user.id }).sort({ createdAt: -1 });
         let extraDays = 0;
         let carryForwardMsg = "";
 
         if (lastSub) {
-            // Calculate Expected Bottles (Duration * Qty)
             const lsStart = new Date(lastSub.startDate);
             const lsEnd = new Date(lastSub.endDate);
-            // Time diff in days (+1 to include start date)
             const durationDays = Math.round((lsEnd - lsStart) / (1000 * 60 * 60 * 24)) + 1;
             
             const expectedTotal = durationDays * lastSub.quantity;
 
-            // Count actual DELIVERED orders
             const deliveredCount = await Order.countDocuments({
                 userId: req.user.id,
                 orderType: 'Subscription',
@@ -1898,17 +1893,14 @@ app.post('/api/subscription/create', authMiddleware, async (req, res) => {
                 status: 'Delivered'
             });
 
-            // Calculate missed bottles
             const missedBottles = expectedTotal - deliveredCount;
 
             if (missedBottles > 0) {
-                // Add equivalent days for the NEW subscription
                 extraDays = Math.ceil(missedBottles / quantity);
                 carryForwardMsg = ` (Added ${extraDays} extra days for ${missedBottles} pending bottles)`;
             }
         }
 
-        // 3. Calculate New End Date
         const totalDuration = standardDays + extraDays;
         
         const start = new Date(startDate);
@@ -1917,7 +1909,7 @@ app.post('/api/subscription/create', authMiddleware, async (req, res) => {
         
         const endDate = end.toISOString().split('T')[0];
 
-        // 4. Save
+        
         user.walletBalance -= totalCost;
         await user.save();
 
@@ -1931,7 +1923,6 @@ app.post('/api/subscription/create', authMiddleware, async (req, res) => {
         });
         await newSub.save();
        
-        // 5. Place Immediate Order if Today
         const today = new Date().toISOString().split('T')[0];
         if (startDate === today) {
             const firstOrder = new Order({
@@ -1976,7 +1967,6 @@ app.get('/api/subscription/status', authMiddleware, async (req, res) => {
     }
 });
 
-// --- ADDED: Subscription Preview for Frontend ---
 app.get('/api/subscription/preview', authMiddleware, async (req, res) => {
     try {
         const lastSub = await Subscription.findOne({ userId: req.user.id }).sort({ createdAt: -1 });
