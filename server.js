@@ -1423,6 +1423,8 @@ app.get('/api/orders/by-date', authMiddleware, async (req, res) => {
     try {
         const orders = await Order.find({ deliveryDate: date }).populate('userId', 'name email');
 
+        const validOrders = orders.filter(order => order.userId != null);
+
         const formattedOrders = orders.map(order => ({
             _id: order._id,
             user: order.userId,
